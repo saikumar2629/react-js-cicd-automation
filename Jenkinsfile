@@ -34,10 +34,10 @@ pipeline {
             }
         }
 
-        stage('Start Frontend on Port 3001') {
+        stage('Start Frontend on Port 3000') {
             steps {
                 dir('frontend') {
-                    sh 'PORT=3001 nohup npm start > frontend.log 2>&1 &'
+                    sh 'PORT=3000 nohup npm start > frontend.log 2>&1 &'
                 }
             }
         }
