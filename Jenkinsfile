@@ -5,7 +5,7 @@ pipeline {
 
         stage('Clone Repo') {
             steps {
-                echo "Cloning GitHub repository"
+                echo "Code cloned automatically by Jenkins"
             }
         }
 
@@ -13,15 +13,6 @@ pipeline {
             steps {
                 dir('backend') {
                     sh 'npm install'
-                }
-            }
-        }
-
-        stage('Start Backend on Port 5001') {
-            steps {
-                dir('backend') {
-                    sh 'pkill node || true'
-                    sh 'nohup node server.js > backend.log 2>&1 &'
                 }
             }
         }
@@ -34,12 +25,31 @@ pipeline {
             }
         }
 
+        stage('Deploy to /opt/app') {
+            steps {
+                sh '''
+                rm -rf /opt/app/*
+                cp -r backend frontend /opt/app/
+                '''
+            }
+        }
+
+        stage('Start Backend on Port 5001') {
+            steps {
+                dir('/home/ubuntu/app/backend') {
+                    sh 'pkill node || true'
+                    sh 'nohup node server.js > backend.log 2>&1 &'
+                }
+            }
+        }
+
         stage('Start Frontend on Port 3000') {
             steps {
-                dir('frontend') {
+                dir('/home/ubuntu/app/frontend') {
                     sh 'PORT=3000 nohup npm start > frontend.log 2>&1 &'
                 }
             }
         }
     }
 }
+
