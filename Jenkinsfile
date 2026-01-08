@@ -38,7 +38,7 @@ pipeline {
 
         stage('Start Backend on Port 5001') {
             steps {
-                dir('/home/ubuntu/app/backend') {
+                dir('/opt/app/backend') {
                     sh 'pkill node || true'
                     sh 'nohup node server.js > backend.log 2>&1 &'
                 }
@@ -47,7 +47,7 @@ pipeline {
 
         stage('Start Frontend on Port 3000') {
             steps {
-                dir('/home/ubuntu/app/frontend') {
+                dir('/opt/app/frontend') {
                     sh 'PORT=3000 nohup npm start > frontend.log 2>&1 &'
                 }
             }
