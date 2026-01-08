@@ -19,8 +19,8 @@ function App() {
     setLoading(true);
 
     const url = isSignup
-      ? "http://13.232.35.67:5001/api/signup"
-      : "http://13.232.35.67:5001/api/login";
+      ? "https://nagavamsi-api.sohaildevops.site/api/signup"
+      : "https://nagavamsi-api.sohaildevops.site/api/login";
 
     const payload = isSignup
       ? form
