@@ -31,7 +31,6 @@ pipeline {
         stage('Deploy to /opt/app') {
             steps {
                 sh '''
-                rm -rf /opt/app/*
                 cp -r backend frontend /opt/app/
                 '''
             }
