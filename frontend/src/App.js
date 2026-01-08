@@ -52,7 +52,7 @@ function App() {
   return (
     <div className="container">
       <div className="card">
-        <h2>{isSignup ? "Create Account" : "Login"}</h2>
+        <h2>{isSignup ? "Create Account" : " User Login"}</h2>
 
         <form onSubmit={handleSubmit}>
           {isSignup && (
