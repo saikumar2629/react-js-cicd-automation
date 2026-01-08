@@ -1,6 +1,7 @@
 pipeline {
     agent any
-     tools {
+
+    tools {
         nodejs 'node18'
     }
 
@@ -12,46 +13,41 @@ pipeline {
             }
         }
 
-        stage('Install Backend Dependencies') {
-            steps {
-                dir('backend') {
-                    sh 'npm install'
-                }
-            }
-        }
-
-        stage('Install Frontend Dependencies') {
-            steps {
-                dir('frontend') {
-                    sh 'npm install'
-                }
-            }
-        }
-
         stage('Deploy to /opt/app') {
             steps {
                 sh '''
-                cp -r backend frontend /opt/app/
+                sudo rm -rf /opt/app
+                sudo mkdir -p /opt/app
+                sudo cp -r backend frontend /opt/app/
+                sudo chown -R ubuntu:ubuntu /opt/app
                 '''
             }
         }
 
-        stage('Start Backend on Port 5001') {
+        stage('Backend: Install & Run') {
             steps {
-                dir('/opt/app/backend') {
-                    sh 'pkill node || true'
-                    sh 'nohup node server.js > backend.log 2>&1 &'
-                }
+                sh '''
+                sudo -u ubuntu bash << EOF
+                cd /opt/app/backend
+                npm install
+                pkill node || true
+                nohup node server.js > backend.log 2>&1 &
+                EOF
+                '''
             }
         }
 
-        stage('Start Frontend on Port 3000') {
+        stage('Frontend: Install & Run') {
             steps {
-                dir('/opt/app/frontend') {
-                    sh 'PORT=3000 nohup npm start > frontend.log 2>&1 &'
-                }
+                sh '''
+                sudo -u ubuntu bash << EOF
+                cd /opt/app/frontend
+                npm install
+                pkill npm || true
+                PORT=3000 nohup npm start > frontend.log 2>&1 &
+                EOF
+                '''
             }
         }
     }
 }
-
