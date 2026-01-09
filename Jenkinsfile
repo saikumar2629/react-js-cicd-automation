@@ -51,11 +51,17 @@ pipeline {
             steps {
                 sh '''
                 sudo -u ubuntu bash -c "
-                set -e &&
-                cd /opt/app/frontend &&
-                npm install && 
+                set -e 
+                cd /opt/app/frontend
+                
+                npm install
+                
                 pkill -f react-scripts || true
-                HOST=0.0.0.0 PORT=3000 nohup npm start > frontend.log 2>&1 &
+                
+                export HOST=0.0.0.0 
+                export PORT=3000
+                
+                nohup npm start > frontend.log 2>&1 &
                 "
                 '''
             }
