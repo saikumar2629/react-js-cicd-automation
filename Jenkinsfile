@@ -49,6 +49,7 @@ pipeline {
                 # Wait until PostgreSQL is ready
                 for i in {1..15}; do
                   pg_isready -h ${DB_HOST} -p ${DB_PORT} && break
+                  echo "Waiting for PostgreSQL..."
                   sleep 2
                 done
                 '''
@@ -122,6 +123,23 @@ EOF
                 sleep 5
                 echo "Backend should be running on port ${BACKEND_PORT}:"
                 ss -tulpn | grep ${BACKEND_PORT} || true
+                '''
+            }
+        }
+
+        stage('Wait Backend Ready') {
+            steps {
+                sh '''
+                echo "Waiting for backend to respond..."
+                for i in {1..15}; do
+                  RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${BACKEND_PORT}/api/signup || true)
+                  if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "405" ]; then
+                    echo "Backend is ready!"
+                    break
+                  fi
+                  echo "Backend not ready yet, retrying..."
+                  sleep 2
+                done
                 '''
             }
         }
