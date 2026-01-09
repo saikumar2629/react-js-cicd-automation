@@ -16,7 +16,7 @@ pipeline {
         stage('Deploy to /opt/app') {
             steps {
                 sh '''
-                sudo rm -rf /opt/app
+                sudo rm -rf /opt/app/*
                 sudo mkdir -p /opt/app
                 sudo cp -r backend frontend /opt/app/
                 sudo chown -R ubuntu:ubuntu /opt/app
