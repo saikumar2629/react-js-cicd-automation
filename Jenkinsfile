@@ -36,13 +36,19 @@ pipeline {
         stage('Backend: Install & Run') {
             steps {
                 sh '''
-                sudo -u ubuntu bash -c " 
-                set -e &&
-                cd /opt/app/backend &&
-                npm install &&
-                pkill -f server.js || true &&
+                set -e
+                
+                echo "stopping backend server ...(as root)"
+                sudo pkill -f "node server.js" || true
+
+                echo "starting backend (as ubuntu)..."
+                sudo -u ubuntu bash -c '
+                cd /opt/app/backend 
+                
+                npm install 
+                
                 nohup node server.js > backend.log 2>&1 &
-                "
+                '
                 '''
             }
         }
