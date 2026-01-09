@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP = "65.0.104.110"         // EC2 public IP
+        SERVER_IP = "65.0.104.110"        // Replace with your EC2 public IP
         BACKEND_PORT = "5001"
         FRONTEND_PORT = "3000"
         DB_NAME = "saidb"
@@ -26,8 +26,8 @@ pipeline {
             steps {
                 sh '''
                 if ! command -v node >/dev/null 2>&1; then
-                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-                    sudo apt-get install -y nodejs
+                  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                  sudo apt-get install -y nodejs
                 fi
                 node -v
                 npm -v
@@ -42,6 +42,7 @@ pipeline {
                     sudo apt-get update
                     sudo apt-get install -y postgresql postgresql-contrib
                 fi
+
                 sudo systemctl enable postgresql
                 sudo systemctl restart postgresql
 
@@ -55,34 +56,33 @@ pipeline {
             }
         }
 
-        stage('Setup PostgreSQL DB & User') {
+        stage('Setup PostgreSQL Database & User') {
             steps {
                 sh '''
                 sudo -u postgres psql << EOF
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
-    CREATE DATABASE ${DB_NAME};
-  END IF;
-END
-\$\$;
+                DO \$\$
+                BEGIN
+                  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
+                    CREATE DATABASE ${DB_NAME};
+                  END IF;
+                END
+                \$\$;
 
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
-    CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
-  END IF;
-END
-\$\$;
+                DO \$\$
+                BEGIN
+                  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
+                    CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
+                  END IF;
+                END
+                \$\$;
 
-ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
-GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
-EOF
+                GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
+                EOF
                 '''
             }
         }
 
-        stage('Deploy App') {
+        stage('Deploy Application') {
             steps {
                 sh '''
                 sudo rm -rf /opt/app
@@ -93,7 +93,7 @@ EOF
             }
         }
 
-        stage('Configure Backend ENV') {
+        stage('Configure Backend Environment') {
             steps {
                 sh '''
                 sudo -u ubuntu bash -c '
@@ -129,14 +129,14 @@ EOF
         stage('Wait Backend Ready') {
             steps {
                 sh '''
-                echo "Waiting for backend to respond..."
-                for i in {1..15}; do
+                echo "Waiting for backend API..."
+                for i in {1..20}; do
                     RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${BACKEND_PORT}/api/signup || true)
                     if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "405" ]; then
                         echo "Backend is ready!"
                         break
                     fi
-                    echo "Backend not ready yet, retrying..."
+                    echo "Backend not ready, retrying..."
                     sleep 2
                 done
                 '''
