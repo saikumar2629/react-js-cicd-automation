@@ -28,9 +28,9 @@ pipeline {
             steps {
                 sh '''
                 sudo -u ubuntu bash -c " 
-                cd /opt/app/backend
-                npm install
-                pkill node || true
+                cd /opt/app/backend &&
+                npm install &&
+                pkill node || true &&
                 nohup node server.js > backend.log 2>&1 &
                 "
                 '''
@@ -42,10 +42,23 @@ pipeline {
                 sh '''
                 sudo -u ubuntu bash -c "
                 cd /opt/app/frontend
-                npm install
+                npm install 
                 pkill npm || true
-                PORT=3000 nohup npm start > frontend.log 2>&1 &
+                HOST=0.0.0.0 PORT=3000 nohup npm start > frontend.log 2>&1 &
                 "
+                '''
+            }
+        }
+        
+        stage('Verify Ports') {
+            steps {
+                sh '''
+                echo 'Checking backend port...'
+                sleep 5
+                ss -tulpn | grep 5001 || true
+
+                echo 'Checking frontend port...'
+                ss -tulpn | grep 3000 || true
                 '''
             }
         }
