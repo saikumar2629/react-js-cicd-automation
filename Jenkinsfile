@@ -22,6 +22,53 @@ pipeline {
             }
         }
 
+        stage('Ensure postgreSQL is running') {
+            steps {
+                sh '''
+                echo "Installing postgreSQL if missing..."
+                if ! command -v psql >/dev/null 2>&1;then
+                    sudo apt-get update
+                    sudo apt-get install -y postgresql postgresql-contrib
+                fi
+
+                echo "starting postgreSQL service..."
+                sudo systemctl start postgresql
+                sudo systemctl enable postgresql
+
+                sudo systemctl status postgresql --no-pager
+                '''
+            }
+        }
+
+        stage('Setup PostgreSQL Database') {
+    steps {
+        sh '''
+        sudo -u postgres psql << EOF
+        DO
+        $$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'saidb') THEN
+                CREATE DATABASE saidb;
+            END IF;
+        END
+        $$;
+
+        DO
+        $$
+        BEGIN
+            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'saikumar') THEN
+                CREATE USER saikumar WITH PASSWORD 'saikumar123';
+            END IF;
+        END
+        $$;
+
+        GRANT ALL PRIVILEGES ON DATABASE saidb TO saikumar;
+        EOF
+        '''
+    }
+}
+
+
         stage('Deploy to /opt/app') {
             steps {
                 sh '''
