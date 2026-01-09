@@ -1,15 +1,24 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'node18'
-    }
-
     stages {
 
         stage('Clone Repo') {
             steps {
                 echo "Code cloned automatically by Jenkins"
+            }
+        }
+        
+        stage('Install Node.js (System-wide)') {
+            steps {
+                sh '''
+                if ! command -v node >/dev/null 2>&1; then
+                  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                  sudo apt-get install -y nodejs
+                fi
+                node -v
+                npm -v
+                '''
             }
         }
 
@@ -23,14 +32,15 @@ pipeline {
                 '''
             }
         }
-
+        
         stage('Backend: Install & Run') {
             steps {
                 sh '''
                 sudo -u ubuntu bash -c " 
+                set -e &&
                 cd /opt/app/backend &&
                 npm install &&
-                pkill node || true &&
+                pkill -f server.js || true &&
                 nohup node server.js > backend.log 2>&1 &
                 "
                 '''
@@ -41,9 +51,10 @@ pipeline {
             steps {
                 sh '''
                 sudo -u ubuntu bash -c "
-                cd /opt/app/frontend
-                npm install 
-                pkill npm || true
+                set -e &&
+                cd /opt/app/frontend &&
+                npm install && 
+                pkill -f react-scripts || true
                 HOST=0.0.0.0 PORT=3000 nohup npm start > frontend.log 2>&1 &
                 "
                 '''
