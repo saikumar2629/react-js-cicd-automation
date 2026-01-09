@@ -1,14 +1,27 @@
 pipeline {
     agent any
 
+    environment {
+        SERVER_IP = "65.0.104.110"  // Replace with your EC2 public IP
+        BACKEND_PORT = "5001"
+        FRONTEND_PORT = "3000"
+        DB_NAME = "saidb"
+        DB_USER = "saikumar"
+        DB_PASSWORD = "saikumar123"
+        DB_HOST = "127.0.0.1"
+        DB_PORT = "5432"
+        GIT_REPO = "https://github.com/saikumar2629/react-js-cicd-automation.git"
+        GIT_BRANCH = "main"
+    }
+
     stages {
 
         stage('Clone Repo') {
             steps {
-                echo "Code cloned automatically by Jenkins"
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
             }
         }
-        
+
         stage('Install Node.js (System-wide)') {
             steps {
                 sh '''
@@ -22,80 +35,93 @@ pipeline {
             }
         }
 
-        stage('Ensure postgreSQL is running') {
+        stage('Install & Start PostgreSQL') {
             steps {
                 sh '''
-                echo "Installing postgreSQL if missing..."
-                if ! command -v psql >/dev/null 2>&1;then
-                    sudo apt-get update
-                    sudo apt-get install -y postgresql postgresql-contrib
+                if ! command -v psql >/dev/null 2>&1; then
+                  sudo apt-get update
+                  sudo apt-get install -y postgresql postgresql-contrib
                 fi
 
-                echo "starting postgreSQL service..."
-                sudo systemctl start postgresql
                 sudo systemctl enable postgresql
+                sudo systemctl restart postgresql
 
-                sudo systemctl status postgresql --no-pager
+                # Wait until PostgreSQL is ready
+                for i in {1..15}; do
+                  pg_isready -h ${DB_HOST} -p ${DB_PORT} && break
+                  sleep 2
+                done
                 '''
             }
         }
 
-        stage('Setup PostgreSQL Database') {
-    steps {
-        sh '''
-        sudo -u postgres psql << EOF
-        DO
-        $$
-        BEGIN
-            IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'saidb') THEN
-                CREATE DATABASE saidb;
-            END IF;
-        END
-        $$;
+        stage('Setup PostgreSQL Database & User') {
+            steps {
+                sh '''
+                sudo -u postgres psql << EOF
+                DO \$\$
+                BEGIN
+                  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
+                    CREATE DATABASE ${DB_NAME};
+                  END IF;
+                END
+                \$\$;
 
-        DO
-        $$
-        BEGIN
-            IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'saikumar') THEN
-                CREATE USER saikumar WITH PASSWORD 'saikumar123';
-            END IF;
-        END
-        $$;
+                DO \$\$
+                BEGIN
+                  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
+                    CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
+                  END IF;
+                END
+                \$\$;
 
-        GRANT ALL PRIVILEGES ON DATABASE saidb TO saikumar;
-        EOF
-        '''
-    }
-}
-
+                ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
+                GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
+                EOF
+                '''
+            }
+        }
 
         stage('Deploy to /opt/app') {
             steps {
                 sh '''
-                sudo rm -rf /opt/app/*
+                sudo rm -rf /opt/app
                 sudo mkdir -p /opt/app
                 sudo cp -r backend frontend /opt/app/
                 sudo chown -R ubuntu:ubuntu /opt/app
                 '''
             }
         }
-        
+
+        stage('Configure Backend ENV') {
+            steps {
+                sh '''
+                sudo -u ubuntu bash -c '
+                cat > /opt/app/backend/.env << EOF
+DB_HOST=${DB_HOST}
+DB_PORT=${DB_PORT}
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASSWORD=${DB_PASSWORD}
+PORT=${BACKEND_PORT}
+EOF
+                '
+                '''
+            }
+        }
+
         stage('Backend: Install & Run') {
             steps {
                 sh '''
-                set -e
-                
-                echo "stopping backend server ...(as root)"
                 sudo pkill -f "node server.js" || true
-
-                echo "starting backend (as ubuntu)..."
                 sudo -u ubuntu bash -c '
-                cd /opt/app/backend 
-                
-                npm install 
-                
+                cd /opt/app/backend
+                npm install
                 nohup node server.js > backend.log 2>&1 &
                 '
+                sleep 5
+                echo "Backend should be running on port ${BACKEND_PORT}:"
+                ss -tulpn | grep ${BACKEND_PORT} || true
                 '''
             }
         }
@@ -103,37 +129,22 @@ pipeline {
         stage('Frontend: Install & Run') {
             steps {
                 sh '''
-                set -e
-                
-                echo "stopping existing React app (as root)..."
-                sudo pkill -f react-scripts || true 
-                
-                echo "Starting React app (as ubuntu)..."
+                sudo pkill -f react-scripts || true
                 sudo -u ubuntu bash -c "
                 cd /opt/app/frontend
-                
                 npm install
-                
-                export HOST=0.0.0.0 
-                export PORT=3000
-                
+                export HOST=0.0.0.0
+                export PORT=${FRONTEND_PORT}
+                export REACT_APP_API_URL=http://${SERVER_IP}:${BACKEND_PORT}
                 nohup npm start > frontend.log 2>&1 &
+                "
+                sleep 5
+                echo "Frontend should be running on port ${FRONTEND_PORT}:"
+                ss -tulpn | grep ${FRONTEND_PORT} || true
                 "
                 '''
             }
         }
-        
-        stage('Verify Ports') {
-            steps {
-                sh '''
-                echo 'Checking backend port...'
-                sleep 5
-                ss -tulpn | grep 5001 || true
 
-                echo 'Checking frontend port...'
-                ss -tulpn | grep 3000 || true
-                '''
-            }
-        }
     }
 }
