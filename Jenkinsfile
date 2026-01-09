@@ -50,13 +50,16 @@ pipeline {
         stage('Frontend: Install & Run') {
             steps {
                 sh '''
+                set -e
+                
+                echo "stopping existing React app (as root)..."
+                sudo pkill -f react-scripts || true 
+                
+                echo "Starting React app (as ubuntu)..."
                 sudo -u ubuntu bash -c "
-                set -e 
                 cd /opt/app/frontend
                 
                 npm install
-                
-                pkill -f react-scripts || true
                 
                 export HOST=0.0.0.0 
                 export PORT=3000
