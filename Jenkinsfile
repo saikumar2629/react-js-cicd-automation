@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP = "65.0.104.110"  // Replace with your EC2 public IP
+        SERVER_IP = "65.0.104.110"         // Your EC2 public IP
         BACKEND_PORT = "5001"
         FRONTEND_PORT = "3000"
         DB_NAME = "saidb"
@@ -22,7 +22,7 @@ pipeline {
             }
         }
 
-        stage('Install Node.js (System-wide)') {
+        stage('Install Node.js') {
             steps {
                 sh '''
                 if ! command -v node >/dev/null 2>&1; then
@@ -42,7 +42,6 @@ pipeline {
                   sudo apt-get update
                   sudo apt-get install -y postgresql postgresql-contrib
                 fi
-
                 sudo systemctl enable postgresql
                 sudo systemctl restart postgresql
 
@@ -56,7 +55,7 @@ pipeline {
             }
         }
 
-        stage('Setup PostgreSQL Database & User') {
+        stage('Setup PostgreSQL DB & User') {
             steps {
                 sh '''
                 sudo -u postgres psql << EOF
@@ -79,6 +78,9 @@ pipeline {
                 ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
                 GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
                 EOF
+
+                # Wait a bit to ensure DB is fully ready
+                sleep 5
                 '''
             }
         }
@@ -120,17 +122,7 @@ EOF
                 npm install
                 nohup node server.js > backend.log 2>&1 &
                 '
-                sleep 5
-                echo "Backend should be running on port ${BACKEND_PORT}:"
-                ss -tulpn | grep ${BACKEND_PORT} || true
-                '''
-            }
-        }
-
-        stage('Wait Backend Ready') {
-            steps {
-                sh '''
-                echo "Waiting for backend to respond..."
+                # Wait until backend responds
                 for i in {1..15}; do
                   RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${BACKEND_PORT}/api/signup || true)
                   if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "405" ]; then
@@ -140,34 +132,28 @@ EOF
                   echo "Backend not ready yet, retrying..."
                   sleep 2
                 done
+                ss -tulpn | grep ${BACKEND_PORT} || true
                 '''
             }
         }
 
         stage('Frontend: Install & Run') {
-    steps {
-        sh '''
-        # Stop any existing React apps
-        sudo pkill -f react-scripts || true
-
-        # Start frontend as ubuntu user
-        sudo -u ubuntu bash -c '
-        cd /opt/app/frontend
-        npm install
-        export HOST=0.0.0.0
-        export PORT=${FRONTEND_PORT}
-        export REACT_APP_API_URL=http://${SERVER_IP}:${BACKEND_PORT}
-        nohup npm start > frontend.log 2>&1 &
-        '
-
-        # Wait a few seconds and check
-        sleep 5
-        echo "Frontend should be running on port ${FRONTEND_PORT}:"
-        ss -tulpn | grep ${FRONTEND_PORT} || true
-        '''
-    }
-}
-
+            steps {
+                sh '''
+                sudo pkill -f react-scripts || true
+                sudo -u ubuntu bash -c '
+                cd /opt/app/frontend
+                npm install
+                export HOST=0.0.0.0
+                export PORT=${FRONTEND_PORT}
+                export REACT_APP_API_URL=http://${SERVER_IP}:${BACKEND_PORT}
+                nohup npm start > frontend.log 2>&1 &
+                '
+                sleep 5
+                ss -tulpn | grep ${FRONTEND_PORT} || true
+                '''
+            }
+        }
 
     }
 }
