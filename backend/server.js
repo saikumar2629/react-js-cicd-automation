@@ -1,33 +1,30 @@
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
+require("dotenv").config();
 
 const app = express();
-const PORT = 5001;
+const PORT = process.env.PORT || 5001;
 
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST"],
-  allowedHeaders: ["Content-Type"]
-}));
+app.use(cors());
 app.use(express.json());
 
 /* =========================
-   Health Check
+   HEALTH CHECK (ADD HERE)
 ========================= */
 app.get("/health", (req, res) => {
-  res.status(200).send("Backend is running");
+  res.status(200).send("OK");
 });
 
 /* =========================
-   PostgreSQL
+   PostgreSQL Connection
 ========================= */
 const pool = new Pool({
-  user: "saikumar",
-  host: "localhost",
-  database: "saidb",
-  password: "saikumar123",
-  port: 5432,
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
 });
 
 pool.connect()
@@ -35,7 +32,19 @@ pool.connect()
   .catch(err => console.error("❌ PostgreSQL error:", err));
 
 /* =========================
-   Signup
+   Create table if not exists
+========================= */
+pool.query(`
+  CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100),
+    email VARCHAR(100) UNIQUE,
+    password VARCHAR(100)
+  )
+`);
+
+/* =========================
+   Signup API
 ========================= */
 app.post("/api/signup", async (req, res) => {
   const { username, email, password } = req.body;
@@ -45,14 +54,15 @@ app.post("/api/signup", async (req, res) => {
       "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
       [username, email, password]
     );
-    res.json({ message: "Signup successful" });
+
+    res.json({ status: "success", message: "Signup successful" });
   } catch (err) {
-    res.status(409).json({ message: "User already exists" });
+    res.status(409).json({ status: "error", message: "User already exists" });
   }
 });
 
 /* =========================
-   Login
+   Login API
 ========================= */
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
@@ -63,14 +73,14 @@ app.post("/api/login", async (req, res) => {
   );
 
   if (result.rows.length === 0) {
-    return res.status(401).json({ message: "Invalid credentials" });
+    return res.status(401).json({ status: "error", message: "Invalid credentials" });
   }
 
-  res.json({ message: "Login successful" });
+  res.json({ status: "success", message: "Login successful" });
 });
 
 /* =========================
-   Start
+   Start server
 ========================= */
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Backend running on port ${PORT}`);
