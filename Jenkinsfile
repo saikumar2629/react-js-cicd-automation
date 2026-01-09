@@ -119,7 +119,7 @@ EOF
                 npm install
                 nohup node server.js > backend.log 2>&1 &
                 '
-                sleep 5
+                sleep 15
                 echo "Backend running on port ${BACKEND_PORT}:"
                 ss -tulpn | grep ${BACKEND_PORT} || true
                 '''
