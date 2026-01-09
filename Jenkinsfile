@@ -145,24 +145,29 @@ EOF
         }
 
         stage('Frontend: Install & Run') {
-            steps {
-                sh '''
-                sudo pkill -f react-scripts || true
-                sudo -u ubuntu bash -c "
-                cd /opt/app/frontend
-                npm install
-                export HOST=0.0.0.0
-                export PORT=${FRONTEND_PORT}
-                export REACT_APP_API_URL=http://${SERVER_IP}:${BACKEND_PORT}
-                nohup npm start > frontend.log 2>&1 &
-                "
-                sleep 5
-                echo "Frontend should be running on port ${FRONTEND_PORT}:"
-                ss -tulpn | grep ${FRONTEND_PORT} || true
-                "
-                '''
-            }
-        }
+    steps {
+        sh '''
+        # Stop any existing React apps
+        sudo pkill -f react-scripts || true
+
+        # Start frontend as ubuntu user
+        sudo -u ubuntu bash -c '
+        cd /opt/app/frontend
+        npm install
+        export HOST=0.0.0.0
+        export PORT=${FRONTEND_PORT}
+        export REACT_APP_API_URL=http://${SERVER_IP}:${BACKEND_PORT}
+        nohup npm start > frontend.log 2>&1 &
+        '
+
+        # Wait a few seconds and check
+        sleep 5
+        echo "Frontend should be running on port ${FRONTEND_PORT}:"
+        ss -tulpn | grep ${FRONTEND_PORT} || true
+        '''
+    }
+}
+
 
     }
 }
