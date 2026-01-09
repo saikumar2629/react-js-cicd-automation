@@ -1,165 +1,83 @@
-pipeline {
-    agent any
+const express = require("express");
+const cors = require("cors");
+const { Pool } = require("pg");
 
-    environment {
-        SERVER_IP = "65.0.104.110"         // EC2 public IP
-        BACKEND_PORT = "5001"
-        FRONTEND_PORT = "3000"
-        DB_NAME = "saidb"
-        DB_USER = "saikumar"
-        DB_PASSWORD = "saikumar123"
-        DB_HOST = "127.0.0.1"
-        DB_PORT = "5432"
-        GIT_REPO = "https://github.com/saikumar2629/react-js-cicd-automation.git"
-        GIT_BRANCH = "main"
-    }
+const app = express();
+const PORT = process.env.PORT || 5001; // Use env PORT if provided
 
-    stages {
+app.use(cors());
+app.use(express.json());
 
-        stage('Clone Repo') {
-            steps {
-                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
-            }
-        }
+/* =========================
+   PostgreSQL Connection
+   Reads from environment variables
+========================= */
+const pool = new Pool({
+  user: process.env.DB_USER || "saikumar",
+  host: process.env.DB_HOST || "localhost",
+  database: process.env.DB_NAME || "saidb",
+  password: process.env.DB_PASSWORD || "saikumar123",
+  port: process.env.DB_PORT || 5432,
+});
 
-        stage('Install Node.js') {
-            steps {
-                sh '''
-                if ! command -v node >/dev/null 2>&1; then
-                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-                    sudo apt-get install -y nodejs
-                fi
-                node -v
-                npm -v
-                '''
-            }
-        }
+pool.connect()
+  .then(() => console.log("✅ PostgreSQL connected"))
+  .catch(err => console.error("❌ PostgreSQL error:", err));
 
-        stage('Install & Start PostgreSQL') {
-            steps {
-                sh '''
-                if ! command -v psql >/dev/null 2>&1; then
-                    sudo apt-get update
-                    sudo apt-get install -y postgresql postgresql-contrib
-                fi
-                sudo systemctl enable postgresql
-                sudo systemctl restart postgresql
+/* =========================
+   Create table if not exists
+========================= */
+pool.query(`
+  CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(100),
+    email VARCHAR(100) UNIQUE,
+    password VARCHAR(100)
+  )
+`);
 
-                # Wait until PostgreSQL is ready
-                for i in {1..15}; do
-                    pg_isready -h ${DB_HOST} -p ${DB_PORT} && break
-                    echo "Waiting for PostgreSQL..."
-                    sleep 2
-                done
-                '''
-            }
-        }
+/* =========================
+   Signup API
+========================= */
+app.post("/api/signup", async (req, res) => {
+  const { username, email, password } = req.body;
 
-        stage('Setup PostgreSQL DB & User') {
-            steps {
-                sh '''
-                sudo -u postgres psql << EOF
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
-    CREATE DATABASE ${DB_NAME};
-  END IF;
-END
-\$\$;
+  try {
+    await pool.query(
+      "INSERT INTO users (username, email, password) VALUES ($1, $2, $3)",
+      [username, email, password]
+    );
 
-DO \$\$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
-    CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
-  END IF;
-END
-\$\$;
+    console.log("✅ Signup successful:", email);
+    res.json({ status: "success", message: "Signup successful" });
 
-ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
-GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
-EOF
-                '''
-            }
-        }
+  } catch (err) {
+    console.error(err.message);
+    res.status(409).json({ status: "error", message: "User already exists" });
+  }
+});
 
-        stage('Deploy App') {
-            steps {
-                sh '''
-                sudo rm -rf /opt/app
-                sudo mkdir -p /opt/app
-                sudo cp -r backend frontend /opt/app/
-                sudo chown -R ubuntu:ubuntu /opt/app
-                '''
-            }
-        }
+/* =========================
+   Login API
+========================= */
+app.post("/api/login", async (req, res) => {
+  const { email, password } = req.body;
 
-        stage('Configure Backend ENV') {
-            steps {
-                sh '''
-                sudo -u ubuntu bash -c '
-                cat > /opt/app/backend/.env << EOF
-DB_HOST=${DB_HOST}
-DB_PORT=${DB_PORT}
-DB_NAME=${DB_NAME}
-DB_USER=${DB_USER}
-DB_PASSWORD=${DB_PASSWORD}
-PORT=${BACKEND_PORT}
-EOF
-                '
-                '''
-            }
-        }
+  const result = await pool.query(
+    "SELECT * FROM users WHERE email=$1 AND password=$2",
+    [email, password]
+  );
 
-        stage('Start Backend') {
-            steps {
-                sh '''
-                sudo pkill -f "node server.js" || true
-                sudo -u ubuntu bash -c '
-                cd /opt/app/backend
-                npm install
-                nohup node server.js > backend.log 2>&1 &
-                '
-                sleep 5
-                echo "Backend running on port ${BACKEND_PORT}:"
-                ss -tulpn | grep ${BACKEND_PORT} || true
-                '''
-            }
-        }
+  if (result.rows.length === 0) {
+    return res.status(401).json({ status: "error", message: "Invalid credentials" });
+  }
 
-        stage('Wait Backend Ready') {
-            steps {
-                sh '''
-                echo "Waiting for backend to respond..."
-                for i in {1..15}; do
-                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${BACKEND_PORT}/api/signup || true)
-                    if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "405" ]; then
-                        echo "Backend is ready!"
-                        break
-                    fi
-                    echo "Backend not ready yet, retrying..."
-                    sleep 2
-                done
-                '''
-            }
-        }
+  res.json({ status: "success", message: "Login successful" });
+});
 
-        stage('Start Frontend') {
-            steps {
-                sh '''
-                sudo pkill -f react-scripts || true
-                sudo -u ubuntu bash -c "
-                cd /opt/app/frontend
-                npm install
-                export HOST=0.0.0.0
-                export PORT=${FRONTEND_PORT}
-                export REACT_APP_API_URL=http://${SERVER_IP}:${BACKEND_PORT}
-                nohup npm start > frontend.log 2>&1 &
-                "
-                sleep 5
-                echo "Frontend running on port ${FRONTEND_PORT}:"
-                ss -tulpn | grep ${FRONTEND_PORT} || true
-                '''
-            }
-        }
-    }
-}
+/* =========================
+   Start server
+========================= */
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Backend running on port ${PORT}`);
+});
