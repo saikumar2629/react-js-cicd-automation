@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 /* =========================
-   Health Check 
+   Health Check (FIRST)
 ========================= */
 app.get("/health", (req, res) => {
   res.status(200).send("OK");
@@ -20,7 +20,7 @@ app.get("/health", (req, res) => {
 ========================= */
 const pool = new Pool({
   user: "saikumar",
-  host: "localhost",
+  host: "127.0.0.1",
   database: "saidb",
   password: "saikumar123",
   port: 5432,
@@ -29,8 +29,8 @@ const pool = new Pool({
 pool.connect()
   .then(() => console.log("✅ PostgreSQL connected"))
   .catch(err => {
-    console.error("❌ PostgreSQL error:", err);
-    process.exit(1); // IMPORTANT
+    console.error("❌ PostgreSQL error:", err.message);
+    // ❗ DO NOT EXIT
   });
 
 /* =========================
@@ -43,7 +43,7 @@ pool.query(`
     email VARCHAR(100) UNIQUE,
     password VARCHAR(100)
   )
-`);
+`).catch(err => console.error("Table creation error:", err.message));
 
 /* =========================
    APIs
@@ -78,7 +78,7 @@ app.post("/api/login", async (req, res) => {
 });
 
 /* =========================
-   Start Server 
+   Start Server (LAST)
 ========================= */
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Backend running on port ${PORT}`);
