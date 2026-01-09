@@ -127,21 +127,23 @@ EOF
         }
 
         stage('Wait Backend Ready') {
-            steps {
-                sh '''
-                echo "Waiting for backend API..."
-                for i in {1..20}; do
-                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${BACKEND_PORT}/api/signup || true)
-                    if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "405" ]; then
-                        echo "Backend is ready!"
-                        break
-                    fi
-                    echo "Backend not ready, retrying..."
-                    sleep 2
-                done
-                '''
-            }
-        }
+  steps {
+    sh '''
+    echo "Waiting for backend health..."
+    for i in {1..20}; do
+      if curl -s http://127.0.0.1:${BACKEND_PORT}/health | grep OK; then
+        echo "Backend is healthy"
+        exit 0
+      fi
+      echo "Waiting..."
+      sleep 2
+    done
+    echo "Backend failed to start"
+    exit 1
+    '''
+  }
+}
+
 
         stage('Start Frontend') {
             steps {
