@@ -27,12 +27,12 @@ pipeline {
         stage('Backend: Install & Run') {
             steps {
                 sh '''
-                sudo -u ubuntu bash << EOF
+                sudo -u ubuntu bash -c " 
                 cd /opt/app/backend
                 npm install
                 pkill node || true
                 nohup node server.js > backend.log 2>&1 &
-                EOF
+                "
                 '''
             }
         }
@@ -40,12 +40,12 @@ pipeline {
         stage('Frontend: Install & Run') {
             steps {
                 sh '''
-                sudo -u ubuntu bash << EOF
+                sudo -u ubuntu bash -c "
                 cd /opt/app/frontend
                 npm install
                 pkill npm || true
                 PORT=3000 nohup npm start > frontend.log 2>&1 &
-                EOF
+                "
                 '''
             }
         }
