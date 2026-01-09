@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SERVER_IP = "65.0.104.110"         // Your EC2 public IP
+        SERVER_IP = "65.0.104.110"         // EC2 public IP
         BACKEND_PORT = "5001"
         FRONTEND_PORT = "3000"
         DB_NAME = "saidb"
@@ -26,8 +26,8 @@ pipeline {
             steps {
                 sh '''
                 if ! command -v node >/dev/null 2>&1; then
-                  curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-                  sudo apt-get install -y nodejs
+                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                    sudo apt-get install -y nodejs
                 fi
                 node -v
                 npm -v
@@ -39,17 +39,17 @@ pipeline {
             steps {
                 sh '''
                 if ! command -v psql >/dev/null 2>&1; then
-                  sudo apt-get update
-                  sudo apt-get install -y postgresql postgresql-contrib
+                    sudo apt-get update
+                    sudo apt-get install -y postgresql postgresql-contrib
                 fi
                 sudo systemctl enable postgresql
                 sudo systemctl restart postgresql
 
                 # Wait until PostgreSQL is ready
                 for i in {1..15}; do
-                  pg_isready -h ${DB_HOST} -p ${DB_PORT} && break
-                  echo "Waiting for PostgreSQL..."
-                  sleep 2
+                    pg_isready -h ${DB_HOST} -p ${DB_PORT} && break
+                    echo "Waiting for PostgreSQL..."
+                    sleep 2
                 done
                 '''
             }
@@ -59,33 +59,30 @@ pipeline {
             steps {
                 sh '''
                 sudo -u postgres psql << EOF
-                DO \$\$
-                BEGIN
-                  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
-                    CREATE DATABASE ${DB_NAME};
-                  END IF;
-                END
-                \$\$;
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
+    CREATE DATABASE ${DB_NAME};
+  END IF;
+END
+\$\$;
 
-                DO \$\$
-                BEGIN
-                  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
-                    CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
-                  END IF;
-                END
-                \$\$;
+DO \$\$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
+    CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
+  END IF;
+END
+\$\$;
 
-                ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
-                GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
-                EOF
-
-                # Wait a bit to ensure DB is fully ready
-                sleep 5
+ALTER DATABASE ${DB_NAME} OWNER TO ${DB_USER};
+GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
+EOF
                 '''
             }
         }
 
-        stage('Deploy to /opt/app') {
+        stage('Deploy App') {
             steps {
                 sh '''
                 sudo rm -rf /opt/app
@@ -113,7 +110,7 @@ EOF
             }
         }
 
-        stage('Backend: Install & Run') {
+        stage('Start Backend') {
             steps {
                 sh '''
                 sudo pkill -f "node server.js" || true
@@ -122,38 +119,47 @@ EOF
                 npm install
                 nohup node server.js > backend.log 2>&1 &
                 '
-                # Wait until backend responds
-                for i in {1..15}; do
-                  RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${BACKEND_PORT}/api/signup || true)
-                  if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "405" ]; then
-                    echo "Backend is ready!"
-                    break
-                  fi
-                  echo "Backend not ready yet, retrying..."
-                  sleep 2
-                done
+                sleep 5
+                echo "Backend running on port ${BACKEND_PORT}:"
                 ss -tulpn | grep ${BACKEND_PORT} || true
                 '''
             }
         }
 
-        stage('Frontend: Install & Run') {
+        stage('Wait Backend Ready') {
+            steps {
+                sh '''
+                echo "Waiting for backend to respond..."
+                for i in {1..15}; do
+                    RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:${BACKEND_PORT}/api/signup || true)
+                    if [ "$RESPONSE" == "200" ] || [ "$RESPONSE" == "405" ]; then
+                        echo "Backend is ready!"
+                        break
+                    fi
+                    echo "Backend not ready yet, retrying..."
+                    sleep 2
+                done
+                '''
+            }
+        }
+
+        stage('Start Frontend') {
             steps {
                 sh '''
                 sudo pkill -f react-scripts || true
-                sudo -u ubuntu bash -c '
+                sudo -u ubuntu bash -c "
                 cd /opt/app/frontend
                 npm install
                 export HOST=0.0.0.0
                 export PORT=${FRONTEND_PORT}
                 export REACT_APP_API_URL=http://${SERVER_IP}:${BACKEND_PORT}
                 nohup npm start > frontend.log 2>&1 &
-                '
+                "
                 sleep 5
+                echo "Frontend running on port ${FRONTEND_PORT}:"
                 ss -tulpn | grep ${FRONTEND_PORT} || true
                 '''
             }
         }
-
     }
 }
